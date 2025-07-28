@@ -1,0 +1,98 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Flutter/Dart/Pub related
+
+.packages
+
+build/
+ios/Flutter/.last_build_id
+
+# Android related
+android/.gradle/
+android/captures/
+android/.idea/
+
+*.apk
+*.aar
+*.jks
+android/key.properties
+
+# iOS related
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/.idea/
+*.xcworkspace
+*.xcuserstate
+*.xcsettings
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+
+# Firebase/Secrets
+*.firebaserc
+*.env
+**/google-services.json
+**/GoogleService-Info.plist
+
+# VSCode files
+.vscode/
+
+# General system
+
+Thumbs.db
+*.swo
+
+# Uncomment this if you use generated JSON serialization code
+# *.g.dart
+
+# Uncomment if you use crash reporting (e.g., Sentry, Firebase Crashlytics)
+# .sentryclirc
+
