@@ -84,7 +84,7 @@ ios/.idea/
 
 # VSCode files
 .vscode/
-
+.env
 # General system
 
 Thumbs.db
