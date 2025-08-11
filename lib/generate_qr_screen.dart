@@ -5,7 +5,12 @@ import 'package:uuid/uuid.dart';
 import 'chat_screen.dart';
 
 class GenerateQRScreen extends StatefulWidget {
-  const GenerateQRScreen({super.key});
+  final String communicationType;
+  
+  const GenerateQRScreen({
+    super.key,
+    required this.communicationType,
+  });
 
   @override
   GenerateQRScreenState createState() => GenerateQRScreenState();
@@ -23,37 +28,50 @@ class GenerateQRScreenState extends State<GenerateQRScreen> {
   }
 
   void _createSession() async {
-    await _firestore.collection('sessions').doc(sessionId).set({
-      'user1': 'user1-id', // You can replace this with a real user ID
-      'user2': null,
-      'status': 'waiting',
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+    if (widget.communicationType == 'wifi') {
+      await _firestore.collection('sessions').doc(sessionId).set({
+        'user1': 'user1-id', // You can replace this with a real user ID
+        'user2': null,
+        'status': 'waiting',
+        'createdAt': FieldValue.serverTimestamp(),
+        'communicationType': widget.communicationType,
+      });
+    }
   }
 
   void _listenForConnection() {
-    _firestore.collection('sessions').doc(sessionId).snapshots().listen((
-      snapshot,
-    ) {
-      if (snapshot.exists && snapshot.data()!['status'] == 'connected') {
-        // Assuming 'user1-id' is the ID for the person who generated the QR code
-        const String currentUserId = 'user1-id';
-        if (!mounted) return;
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) =>
-                ChatScreen(sessionId: sessionId, currentUserId: currentUserId),
-          ),
-        );
-      }
-    });
+    if (widget.communicationType == 'wifi') {
+      _firestore.collection('sessions').doc(sessionId).snapshots().listen((
+        snapshot,
+      ) {
+        if (snapshot.exists && snapshot.data()!['status'] == 'connected') {
+          // Assuming 'user1-id' is the ID for the person who generated the QR code
+          const String currentUserId = 'user1-id';
+          if (!mounted) return;
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ChatScreen(
+                sessionId: sessionId,
+                currentUserId: currentUserId,
+                communicationType: widget.communicationType,
+              ),
+            ),
+          );
+        }
+      });
+    } else if (widget.communicationType == 'bluetooth') {
+      // For Bluetooth, we'll navigate to Bluetooth chat after QR scan
+      // The QR code will contain session ID and communication type
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Generate QR Code')),
+      appBar: AppBar(
+        title: Text('Generate QR Code (${widget.communicationType == 'wifi' ? 'WiFi' : 'Bluetooth'})')
+      ),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -63,7 +81,11 @@ class GenerateQRScreenState extends State<GenerateQRScreen> {
               style: TextStyle(fontSize: 18),
             ),
             const SizedBox(height: 20),
-            QrImageView(data: sessionId, version: QrVersions.auto, size: 200.0),
+            QrImageView(
+              data: '$sessionId:${widget.communicationType}',
+              version: QrVersions.auto,
+              size: 200.0,
+            ),
             const SizedBox(height: 20),
             Text(
               'Session ID: $sessionId',
