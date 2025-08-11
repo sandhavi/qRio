@@ -43,7 +43,7 @@ class _CommunicationSelectionScreenState extends State<CommunicationSelectionScr
               child: Card(
                 elevation: selectedMethod == 'wifi' ? 8 : 2,
                 color: selectedMethod == 'wifi' 
-                  ? Theme.of(context).primaryColor.withOpacity(0.1)
+                  ? Theme.of(context).primaryColor.withValues(alpha: 0.1)
                   : null,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(15),
@@ -106,7 +106,7 @@ class _CommunicationSelectionScreenState extends State<CommunicationSelectionScr
               child: Card(
                 elevation: selectedMethod == 'bluetooth' ? 8 : 2,
                 color: selectedMethod == 'bluetooth' 
-                  ? Theme.of(context).primaryColor.withOpacity(0.1)
+                  ? Theme.of(context).primaryColor.withValues(alpha: 0.1)
                   : null,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(15),

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart' as fbp;
 import 'services/bluetooth_service.dart';
 import 'services/database_helper.dart';
 import 'models/message_model.dart';
@@ -23,13 +23,12 @@ class BluetoothChatScreen extends StatefulWidget {
 
 class _BluetoothChatScreenState extends State<BluetoothChatScreen> {
   final TextEditingController _messageController = TextEditingController();
-  final BluetoothService _bluetoothService = BluetoothService();
+  final BluetoothChatService _bluetoothService = BluetoothChatService();
   final DatabaseHelper _databaseHelper = DatabaseHelper();
   
   List<Message> _messages = [];
   bool _isConnecting = true;
   String _connectionStatus = 'Initializing...';
-  BluetoothDevice? _connectedDevice;
 
   @override
   void initState() {
@@ -87,7 +86,7 @@ class _BluetoothChatScreenState extends State<BluetoothChatScreen> {
     });
     
     // Scan for devices
-    List<BluetoothDevice> devices = await _bluetoothService.scanForDevices(widget.sessionId);
+    List<fbp.BluetoothDevice> devices = await _bluetoothService.scanForDevices(widget.sessionId);
     
     if (devices.isEmpty) {
       setState(() {
@@ -106,7 +105,6 @@ class _BluetoothChatScreenState extends State<BluetoothChatScreen> {
     
     if (connected) {
       setState(() {
-        _connectedDevice = devices.first;
         _connectionStatus = 'Connected';
         _isConnecting = false;
       });
@@ -300,7 +298,7 @@ class _BluetoothChatScreenState extends State<BluetoothChatScreen> {
                                         ? Icons.done_all
                                         : Icons.done,
                                     size: 14,
-                                    color: Colors.white70,
+                                    color: Colors.white.withValues(alpha: 0.7),
                                   ),
                                 ),
                             ],
@@ -319,7 +317,7 @@ class _BluetoothChatScreenState extends State<BluetoothChatScreen> {
                 BoxShadow(
                   offset: const Offset(0, -2),
                   blurRadius: 4,
-                  color: Colors.black.withOpacity(0.1),
+                  color: Colors.black.withValues(alpha: 0.1),
                 ),
               ],
             ),

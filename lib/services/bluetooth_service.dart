@@ -1,21 +1,20 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart' as fbp;
 import 'package:permission_handler/permission_handler.dart';
 
-class BluetoothService {
-  static final BluetoothService _instance = BluetoothService._internal();
-  factory BluetoothService() => _instance;
-  BluetoothService._internal();
+class BluetoothChatService {
+  static final BluetoothChatService _instance = BluetoothChatService._internal();
+  factory BluetoothChatService() => _instance;
+  BluetoothChatService._internal();
 
   // Custom service UUID for QRio app
-  static const String SERVICE_UUID = "00001101-0000-1000-8000-00805F9B34FB";
-  static const String CHARACTERISTIC_UUID = "00002A00-0000-1000-8000-00805F9B34FB";
+  static const String serviceUuid = "00001101-0000-1000-8000-00805F9B34FB";
+  static const String characteristicUuid = "00002A00-0000-1000-8000-00805F9B34FB";
 
-  BluetoothDevice? connectedDevice;
-  BluetoothCharacteristic? messageCharacteristic;
+  fbp.BluetoothDevice? connectedDevice;
+  fbp.BluetoothCharacteristic? messageCharacteristic;
   StreamController<Map<String, dynamic>> messageStreamController = StreamController.broadcast();
   
   Stream<Map<String, dynamic>> get messageStream => messageStreamController.stream;
@@ -52,14 +51,14 @@ class BluetoothService {
       }
 
       // Check if Bluetooth is available and on
-      if (await FlutterBluePlus.isSupported == false) {
+      if (await fbp.FlutterBluePlus.isSupported == false) {
         debugPrint("Bluetooth not supported by this device");
         return false;
       }
 
       // Turn on Bluetooth if it's off
-      var state = await FlutterBluePlus.adapterState.first;
-      if (state != BluetoothAdapterState.on) {
+      var state = await fbp.FlutterBluePlus.adapterState.first;
+      if (state != fbp.BluetoothAdapterState.on) {
         debugPrint('Bluetooth is not on');
         return false;
       }
@@ -74,25 +73,26 @@ class BluetoothService {
   Future<void> startAdvertising(String sessionId) async {
     try {
       isHost = true;
-      // On Android, we'll use device name to advertise session ID
-      // Note: iOS doesn't support custom advertising data easily
-      await FlutterBluePlus.setName('QRio_$sessionId');
-      debugPrint('Started advertising as QRio_$sessionId');
+      // Note: Flutter Blue Plus doesn't directly support advertising
+      // In a real implementation, you'd need platform-specific code
+      // or a different package that supports BLE peripheral mode
+      debugPrint('Would start advertising as QRio_$sessionId');
+      // For now, we'll just set a flag and handle connection differently
     } catch (e) {
       debugPrint('Error starting advertising: $e');
     }
   }
 
-  Future<List<BluetoothDevice>> scanForDevices(String sessionId) async {
-    List<BluetoothDevice> qrioDevices = [];
+  Future<List<fbp.BluetoothDevice>> scanForDevices(String sessionId) async {
+    List<fbp.BluetoothDevice> qrioDevices = [];
     
     try {
       // Start scanning
-      await FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
+      await fbp.FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
       
       // Listen to scan results
-      _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
-        for (ScanResult result in results) {
+      _scanSubscription = fbp.FlutterBluePlus.scanResults.listen((results) {
+        for (fbp.ScanResult result in results) {
           String deviceName = result.device.platformName;
           if (deviceName.startsWith('QRio_$sessionId')) {
             if (!qrioDevices.contains(result.device)) {
@@ -104,7 +104,7 @@ class BluetoothService {
 
       // Wait for scan to complete
       await Future.delayed(const Duration(seconds: 10));
-      await FlutterBluePlus.stopScan();
+      await fbp.FlutterBluePlus.stopScan();
       
     } catch (e) {
       debugPrint('Error scanning for devices: $e');
@@ -113,19 +113,19 @@ class BluetoothService {
     return qrioDevices;
   }
 
-  Future<bool> connectToDevice(BluetoothDevice device) async {
+  Future<bool> connectToDevice(fbp.BluetoothDevice device) async {
     try {
       await device.connect(autoConnect: false);
       connectedDevice = device;
       isConnected = true;
       
       // Discover services
-      List<BluetoothService> services = await device.discoverServices();
+      List<fbp.BluetoothService> services = await device.discoverServices();
       
       // Find our custom service and characteristic
-      for (BluetoothService service in services) {
-        if (service.uuid.toString().toUpperCase() == SERVICE_UUID) {
-          for (BluetoothCharacteristic characteristic in service.characteristics) {
+      for (fbp.BluetoothService service in services) {
+        if (service.uuid.toString().toUpperCase() == serviceUuid) {
+          for (fbp.BluetoothCharacteristic characteristic in service.characteristics) {
             if (characteristic.properties.write && characteristic.properties.notify) {
               messageCharacteristic = characteristic;
               
@@ -143,7 +143,7 @@ class BluetoothService {
       
       // Listen for disconnection
       _connectionSubscription = device.connectionState.listen((state) {
-        if (state == BluetoothConnectionState.disconnected) {
+        if (state == fbp.BluetoothConnectionState.disconnected) {
           isConnected = false;
           connectedDevice = null;
           messageCharacteristic = null;
