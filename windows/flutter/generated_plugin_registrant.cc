@@ -8,6 +8,7 @@
 
 #include <cloud_firestore/cloud_firestore_plugin_c_api.h>
 #include <firebase_core/firebase_core_plugin_c_api.h>
+#include <flutter_ble_peripheral/flutter_ble_peripheral_plugin_c_api.h>
 #include <permission_handler_windows/permission_handler_windows_plugin.h>
 
 void RegisterPlugins(flutter::PluginRegistry* registry) {
@@ -15,6 +16,8 @@ void RegisterPlugins(flutter::PluginRegistry* registry) {
       registry->GetRegistrarForPlugin("CloudFirestorePluginCApi"));
   FirebaseCorePluginCApiRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("FirebaseCorePluginCApi"));
+  FlutterBlePeripheralPluginCApiRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("FlutterBlePeripheralPluginCApi"));
   PermissionHandlerWindowsPluginRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("PermissionHandlerWindowsPlugin"));
 }
