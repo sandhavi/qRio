@@ -44,6 +44,7 @@ dependencies:
   path: ^1.8.3 # For database path handling
   flutter_blue_plus: ^1.31.13 # For Bluetooth communication
   permission_handler: ^11.0.1 # For handling permissions
+  flutter_ble_peripheral: ^1.2.6
   
 
 dev_dependencies:
