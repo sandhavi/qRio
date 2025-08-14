@@ -25,10 +25,13 @@ class _BluetoothChatScreenState extends State<BluetoothChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final BluetoothChatService _bluetoothService = BluetoothChatService();
   final DatabaseHelper _databaseHelper = DatabaseHelper();
-  
+
   List<Message> _messages = [];
   bool _isConnecting = true;
   String _connectionStatus = 'Initializing...';
+  List<fbp.ScanResult> _scanResults = [];
+  fbp.BluetoothDevice? _selectedDevice;
+  bool _isScanning = false;
 
   @override
   void initState() {
@@ -40,14 +43,20 @@ class _BluetoothChatScreenState extends State<BluetoothChatScreen> {
 
   Future<void> _initializeChat() async {
     // Save session to local database
-    await _databaseHelper.insertSession(Session(
-      sessionId: widget.sessionId,
-      user1Id: widget.isHost ? widget.currentUserId : 'peer',
-      user2Id: widget.isHost ? null : widget.currentUserId,
-      status: 'connecting',
-      createdAt: DateTime.now(),
-      communicationType: 'bluetooth',
-    ));
+    // Only insert if doesn't already exist
+    final existing = await _databaseHelper.getSession(widget.sessionId);
+    if (existing == null) {
+      await _databaseHelper.insertSession(
+        Session(
+          sessionId: widget.sessionId,
+          user1Id: widget.isHost ? widget.currentUserId : 'peer',
+          user2Id: widget.isHost ? null : widget.currentUserId,
+          status: 'connecting',
+          createdAt: DateTime.now(),
+          communicationType: 'bluetooth',
+        ),
+      );
+    }
 
     // Initialize Bluetooth
     bool initialized = await _bluetoothService.initializeBluetooth();
@@ -70,10 +79,10 @@ class _BluetoothChatScreenState extends State<BluetoothChatScreen> {
     setState(() {
       _connectionStatus = 'Waiting for peer to connect...';
     });
-    
+
     // Start advertising
     await _bluetoothService.startAdvertising(widget.sessionId);
-    
+
     // Wait for connection
     // In a real implementation, you'd need to set up a Bluetooth server
     // For now, we'll simulate waiting for connection
@@ -82,45 +91,48 @@ class _BluetoothChatScreenState extends State<BluetoothChatScreen> {
 
   Future<void> _connectAsPeer() async {
     setState(() {
-      _connectionStatus = 'Scanning for host device...';
+      _connectionStatus = 'Scanning for nearby devices...';
+      _isScanning = true;
     });
-    
-    // Scan for devices
-    List<fbp.BluetoothDevice> devices = await _bluetoothService.scanForDevices(widget.sessionId);
-    
-    if (devices.isEmpty) {
-      setState(() {
-        _connectionStatus = 'No devices found. Make sure the host is advertising.';
-        _isConnecting = false;
-      });
-      return;
-    }
-    
-    // Connect to the first found device
+    _scanResults = await _bluetoothService.scanForDevices();
     setState(() {
-      _connectionStatus = 'Connecting to host...';
+      _isScanning = false;
+      if (_scanResults.isEmpty) {
+        _connectionStatus = 'No Bluetooth devices found';
+        _isConnecting = false;
+      } else {
+        _connectionStatus = 'Select a device to connect';
+      }
     });
-    
-    bool connected = await _bluetoothService.connectToDevice(devices.first);
-    
-    if (connected) {
+  }
+
+  Future<void> _attemptConnection(fbp.BluetoothDevice device) async {
+    setState(() {
+      _selectedDevice = device;
+      _isConnecting = true;
+      _connectionStatus = 'Connecting to ${device.platformName}...';
+    });
+    final ok = await _bluetoothService.connectToDevice(device);
+    if (ok) {
       setState(() {
         _connectionStatus = 'Connected';
         _isConnecting = false;
       });
-      
-      // Update session status
-      await _databaseHelper.updateSession(Session(
-        sessionId: widget.sessionId,
-        user1Id: 'peer',
-        user2Id: widget.currentUserId,
-        status: 'connected',
-        createdAt: DateTime.now(),
-        communicationType: 'bluetooth',
-      ));
+      final original = await _databaseHelper.getSession(widget.sessionId);
+      await _databaseHelper.updateSession(
+        Session(
+          id: original?.id,
+          sessionId: widget.sessionId,
+          user1Id: original?.user1Id ?? 'peer',
+          user2Id: widget.currentUserId,
+          status: 'connected',
+          createdAt: original?.createdAt ?? DateTime.now(),
+          communicationType: 'bluetooth',
+        ),
+      );
     } else {
       setState(() {
-        _connectionStatus = 'Failed to connect to host';
+        _connectionStatus = 'Failed to connect. Tap a device to retry.';
         _isConnecting = false;
       });
     }
@@ -154,10 +166,10 @@ class _BluetoothChatScreenState extends State<BluetoothChatScreen> {
       isSent: false,
       communicationType: 'bluetooth',
     );
-    
+
     // Save to database
     await _databaseHelper.insertMessage(message);
-    
+
     // Update UI
     setState(() {
       _messages.insert(0, message);
@@ -165,7 +177,9 @@ class _BluetoothChatScreenState extends State<BluetoothChatScreen> {
   }
 
   Future<void> _loadMessages() async {
-    List<Message> messages = await _databaseHelper.getMessages(widget.sessionId);
+    List<Message> messages = await _databaseHelper.getMessages(
+      widget.sessionId,
+    );
     setState(() {
       _messages = messages;
     });
@@ -175,10 +189,10 @@ class _BluetoothChatScreenState extends State<BluetoothChatScreen> {
     if (_messageController.text.isEmpty || !_bluetoothService.isConnected) {
       return;
     }
-    
+
     String messageText = _messageController.text;
     _messageController.clear();
-    
+
     // Create message
     Message message = Message(
       sessionId: widget.sessionId,
@@ -188,18 +202,18 @@ class _BluetoothChatScreenState extends State<BluetoothChatScreen> {
       isSent: true,
       communicationType: 'bluetooth',
     );
-    
+
     // Save to database
     int messageId = await _databaseHelper.insertMessage(message);
-    
+
     // Update UI
     setState(() {
       _messages.insert(0, message);
     });
-    
+
     // Send via Bluetooth
     await _bluetoothService.sendMessage(messageText, widget.currentUserId);
-    
+
     // Update sent status
     await _databaseHelper.updateMessageSentStatus(messageId, true);
   }
@@ -232,131 +246,245 @@ class _BluetoothChatScreenState extends State<BluetoothChatScreen> {
       body: Column(
         children: [
           // Connection status
-          if (_isConnecting)
-            Container(
+          // Connection / scanning status & device list (peer mode)
+          if (_isConnecting ||
+              !_bluetoothService.isConnected ||
+              _scanResults.isNotEmpty)
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
               padding: const EdgeInsets.all(12),
-              color: Colors.blue.shade50,
-              child: Row(
+              decoration: BoxDecoration(
+                color: _bluetoothService.isConnected
+                    ? Colors.green.shade50
+                    : Colors.blue.shade50,
+                border: Border(
+                  bottom: BorderSide(color: Colors.blue.shade100, width: 1),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const CircularProgressIndicator(strokeWidth: 2),
-                  const SizedBox(width: 12),
-                  Text(_connectionStatus),
+                  Row(
+                    children: [
+                      if (_isConnecting)
+                        const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      if (_isConnecting) const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          _connectionStatus,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      if (!_bluetoothService.isConnected && !_isScanning)
+                        IconButton(
+                          icon: const Icon(Icons.refresh),
+                          tooltip: 'Rescan',
+                          onPressed: () {
+                            _isConnecting = true;
+                            _scanResults.clear();
+                            _connectAsPeer();
+                          },
+                        ),
+                    ],
+                  ),
+                  if (_scanResults.isNotEmpty && !_bluetoothService.isConnected)
+                    Wrap(
+                      spacing: 8,
+                      children: _scanResults.map((r) {
+                        final selected =
+                            _selectedDevice?.remoteId == r.device.remoteId;
+                        return ChoiceChip(
+                          label: Text(
+                            r.device.platformName.isEmpty
+                                ? r.device.remoteId.str
+                                : r.device.platformName,
+                          ),
+                          selected: selected,
+                          onSelected: (_) => _attemptConnection(r.device),
+                          avatar: const Icon(Icons.bluetooth, size: 16),
+                        );
+                      }).toList(),
+                    ),
                 ],
               ),
             ),
-          
+
           // Message list
           Expanded(
             child: _messages.isEmpty
                 ? Center(
                     child: Text(
-                      _isConnecting
-                          ? 'Connecting...'
-                          : 'No messages yet. Start a conversation!',
+                      _bluetoothService.isConnected
+                          ? 'Say hi 👋'
+                          : (_connectionStatus),
                       style: TextStyle(color: Colors.grey[600]),
+                      textAlign: TextAlign.center,
                     ),
                   )
                 : ListView.builder(
                     reverse: true,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 12,
+                    ),
                     itemCount: _messages.length,
                     itemBuilder: (context, index) {
                       final message = _messages[index];
                       final isMe = message.senderId == widget.currentUserId;
-                      
-                      return Align(
-                        alignment: isMe
-                            ? Alignment.centerRight
-                            : Alignment.centerLeft,
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(
-                            vertical: 4,
-                            horizontal: 8,
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 10,
-                            horizontal: 15,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isMe ? Colors.blue : Colors.grey[300],
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                message.text,
-                                style: TextStyle(
-                                  color: isMe ? Colors.white : Colors.black,
-                                  fontSize: 16,
-                                ),
-                              ),
-                              if (isMe)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 4),
-                                  child: Icon(
-                                    message.isSent
-                                        ? Icons.done_all
-                                        : Icons.done,
-                                    size: 14,
-                                    color: Colors.white.withValues(alpha: 0.7),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      );
+                      return _MessageBubble(message: message, isMe: isMe);
                     },
                   ),
           ),
-          
+
           // Message input
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              boxShadow: [
-                BoxShadow(
-                  offset: const Offset(0, -2),
-                  blurRadius: 4,
-                  color: Colors.black.withValues(alpha: 0.1),
-                ),
-              ],
+          _InputBar(
+            controller: _messageController,
+            enabled: !_isConnecting && _bluetoothService.isConnected,
+            onSend: _sendMessage,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MessageBubble extends StatelessWidget {
+  final Message message;
+  final bool isMe;
+  const _MessageBubble({required this.message, required this.isMe});
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = isMe
+        ? Theme.of(context).colorScheme.primary
+        : Colors.grey.shade200;
+    final fg = isMe ? Colors.white : Colors.black87;
+    return Align(
+      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.72,
+        ),
+        child: Card(
+          color: bg,
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.only(
+              topLeft: const Radius.circular(18),
+              topRight: const Radius.circular(18),
+              bottomLeft: Radius.circular(isMe ? 18 : 4),
+              bottomRight: Radius.circular(isMe ? 4 : 18),
             ),
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _messageController,
-                    enabled: !_isConnecting && _bluetoothService.isConnected,
-                    decoration: InputDecoration(
-                      hintText: _bluetoothService.isConnected
-                          ? 'Type a message...'
-                          : 'Waiting for connection...',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(25),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
+                Text(message.text, style: TextStyle(color: fg, fontSize: 15.5)),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _fmtTime(message.timestamp),
+                      style: TextStyle(
+                        color: fg.withValues(alpha: 0.7),
+                        fontSize: 11,
                       ),
                     ),
-                    onSubmitted: (_) => _sendMessage(),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: Icon(
-                    Icons.send,
-                    color: _bluetoothService.isConnected
-                        ? Colors.blue
-                        : Colors.grey,
-                  ),
-                  onPressed: _bluetoothService.isConnected ? _sendMessage : null,
+                    if (isMe)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4),
+                        child: Icon(
+                          message.isSent ? Icons.done_all : Icons.done,
+                          size: 14,
+                          color: fg.withValues(alpha: 0.7),
+                        ),
+                      ),
+                  ],
                 ),
               ],
             ),
           ),
-        ],
+        ),
+      ),
+    );
+  }
+
+  static String _fmtTime(DateTime dt) {
+    return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+class _InputBar extends StatelessWidget {
+  final TextEditingController controller;
+  final bool enabled;
+  final VoidCallback onSend;
+  const _InputBar({
+    required this.controller,
+    required this.enabled,
+    required this.onSend,
+  });
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          boxShadow: [
+            BoxShadow(
+              offset: const Offset(0, -2),
+              blurRadius: 6,
+              color: Colors.black.withValues(alpha: 0.08),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: controller,
+                enabled: enabled,
+                minLines: 1,
+                maxLines: 4,
+                decoration: InputDecoration(
+                  hintText: enabled
+                      ? 'Type a message'
+                      : 'Waiting for connection...',
+                  filled: true,
+                  fillColor: Colors.grey.shade100,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+                onSubmitted: (_) => onSend(),
+              ),
+            ),
+            const SizedBox(width: 8),
+            CircleAvatar(
+              backgroundColor: enabled
+                  ? Theme.of(context).colorScheme.primary
+                  : Colors.grey,
+              child: IconButton(
+                icon: const Icon(Icons.send, color: Colors.white, size: 18),
+                onPressed: enabled ? onSend : null,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

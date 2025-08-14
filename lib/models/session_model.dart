@@ -18,8 +18,7 @@ class Session {
   });
 
   Map<String, dynamic> toMap() {
-    return {
-      'id': id,
+    final map = <String, dynamic>{
       'sessionId': sessionId,
       'user1Id': user1Id,
       'user2Id': user2Id,
@@ -27,6 +26,9 @@ class Session {
       'createdAt': createdAt.toIso8601String(),
       'communicationType': communicationType,
     };
+    // Only include id when updating an existing row fetched from DB
+    if (id != null) map['id'] = id;
+    return map;
   }
 
   factory Session.fromMap(Map<String, dynamic> map) {

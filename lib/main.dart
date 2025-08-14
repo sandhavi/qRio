@@ -18,17 +18,16 @@ void main() async {
 
   // Initialize Firebase with best-effort fallbacks to avoid startup crash/black screen.
   try {
-    if (envLoaded) {
-      // Use options from firebase_options.dart which read from .env
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-    } else {
-      // Fall back to platform defaults (e.g., Android uses google-services.json)
-      await Firebase.initializeApp();
+    if (Firebase.apps.isEmpty) {
+      if (envLoaded) {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+      } else {
+        await Firebase.initializeApp();
+      }
     }
   } catch (e) {
-    // As a last resort, continue without Firebase so the UI still loads.
     debugPrint('Firebase init failed, continuing without it: $e');
   }
 
