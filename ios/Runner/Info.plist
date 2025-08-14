@@ -48,5 +48,17 @@
 		<!-- Camera permission description for QR scanning -->
 		<key>NSCameraUsageDescription</key>
 		<string>This app uses the camera to scan QR codes to connect and chat.</string>
+		
+		<!-- Bluetooth permissions -->
+		<key>NSBluetoothAlwaysUsageDescription</key>
+		<string>This app uses Bluetooth to connect and chat with nearby devices.</string>
+		<key>NSBluetoothPeripheralUsageDescription</key>
+		<string>This app uses Bluetooth to connect and chat with nearby devices.</string>
+		
+		<!-- Location permission (required for Bluetooth on iOS) -->
+		<key>NSLocationWhenInUseUsageDescription</key>
+		<string>This app needs location access to scan for nearby Bluetooth devices.</string>
+		<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+		<string>This app needs location access to scan for nearby Bluetooth devices.</string>
 	</dict>
 </plist>
