@@ -1,15 +1,36 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'communication_selection_screen.dart';
+import 'login_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
+  void _logout(BuildContext context) async {
+    await FirebaseAuth.instance.signOut();
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Get the current user's display name (or email if displayName is null)
+    final user = FirebaseAuth.instance.currentUser;
+    final username = user?.displayName ?? user?.email ?? "User";
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('QRio - Instant Chat'),
         centerTitle: true,
+        actions: [
+          IconButton(
+            onPressed: () => _logout(context),
+            icon: const Icon(Icons.logout),
+            tooltip: "Logout",
+          ),
+        ],
       ),
       body: Center(
         child: Padding(
@@ -23,6 +44,18 @@ class HomeScreen extends StatelessWidget {
                 color: Theme.of(context).primaryColor,
               ),
               const SizedBox(height: 30),
+              
+              // Welcome message with username
+              Text(
+                'Welcome, $username!',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 20),
+
               const Text(
                 'Connect & Chat Instantly',
                 style: TextStyle(
