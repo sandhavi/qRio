@@ -1,101 +1,95 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'chat_screen.dart'; // Make sure this is the correct path to your ChatScreen
+import 'chat_screen.dart';
+import '../services/auth_service.dart';
+import 'qr_action_selection_screen.dart';
 
 class ScanQRScreen extends StatefulWidget {
-  final String communicationType;
-  
-  const ScanQRScreen({
-    super.key,
-    required this.communicationType,
-  });
+  const ScanQRScreen({super.key});
 
   @override
   State<ScanQRScreen> createState() => _ScanQRScreenState();
 }
 
 class _ScanQRScreenState extends State<ScanQRScreen> {
+  final AuthService _authService = AuthService();
   bool _handled = false;
 
+
   Future<void> _handleScan(BarcodeCapture barcodeCapture) async {
-    // Get the first barcode's raw value, which contains sessionId:communicationType
     final rawValue = barcodeCapture.barcodes.first.rawValue;
 
-    // Parse the QR code data
     if (rawValue != null && rawValue.isNotEmpty) {
-      final parts = rawValue.split(':');
-      if (parts.length != 2) {
+      final sessionId = rawValue.trim();
+      
+      if (sessionId.isEmpty || sessionId.length < 10) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Invalid QR code format')),
-        );
-        return;
-      }
-      
-      final sessionId = parts[0];
-      final qrCommunicationType = parts[1];
-      
-      // Verify communication type matches
-      if (qrCommunicationType != widget.communicationType) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'QR code is for $qrCommunicationType but you selected ${widget.communicationType}'
-            ),
+          const SnackBar(
+            content: Text('Invalid session ID in QR code'),
+            backgroundColor: Colors.red,
           ),
         );
         return;
       }
-      
-      if (widget.communicationType == 'wifi') {
+
+      {
         final FirebaseFirestore firestore = FirebaseFirestore.instance;
 
-      try {
-        // Update the Firestore session document to mark the user as connected
-        await firestore.collection('sessions').doc(sessionId).update({
-          // You should replace 'user2-id' with a real, unique user ID for the scanner
-          'user2': 'user2-id',
-          'status': 'connected',
-        });
+        try {
+          final sessionDoc = await firestore.collection('sessions').doc(sessionId).get();
+          
+          if (!sessionDoc.exists) {
+            throw 'Session not found';
+          }
+          
+          final otherUserName = sessionDoc.data()?['user1Name'] ?? 'Anonymous';
+          final currentUserId = _authService.currentUser?.uid ?? 'unknown';
+          final currentUserName = await _authService.getCurrentUserName();
+          
+          await firestore.collection('sessions').doc(sessionId).update({
+            'user2': currentUserId,
+            'user2Name': currentUserName ?? 'Anonymous',
+            'user2Email': _authService.currentUser?.email ?? '',
+            'status': 'connected',
+          });
 
-        // Navigate to the chat screen after a successful connection
-        // Pass the session ID and the current user's ID
-        const String currentUserId = 'user2-id';
-        if (!mounted) return;
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ChatScreen(
-              sessionId: sessionId,
-              currentUserId: currentUserId,
-              communicationType: widget.communicationType,
+          if (!mounted) return;
+          Navigator.pushReplacement(
+            context,
+            PageRouteBuilder(
+              pageBuilder: (context, animation, secondaryAnimation) => ChatScreen(
+                sessionId: sessionId,
+                currentUserId: currentUserId,
+                otherUserName: otherUserName,
+              ),
+              transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                const begin = Offset(1.0, 0.0);
+                const end = Offset.zero;
+                const curve = Curves.easeInOutCubic;
+                
+                var tween = Tween(begin: begin, end: end)
+                  .chain(CurveTween(curve: curve));
+                var offsetAnimation = animation.drive(tween);
+                
+                return SlideTransition(
+                  position: offsetAnimation,
+                  child: FadeTransition(
+                    opacity: animation,
+                    child: child,
+                  ),
+                );
+              },
+              transitionDuration: const Duration(milliseconds: 350),
             ),
-          ),
-        );
-      } catch (e) {
-        // Handle any errors, such as a session ID not found in Firestore
-        // or a lack of permissions
-        if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to connect: $e')));
-      }
-      } else if (widget.communicationType == 'bluetooth') {
-        // For Bluetooth, navigate directly to Bluetooth chat screen
-        const String currentUserId = 'user2-id';
-        if (!mounted) return;
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ChatScreen(
-              sessionId: sessionId,
-              currentUserId: currentUserId,
-              communicationType: widget.communicationType,
-            ),
-          ),
-        );
+          );
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Failed to connect: $e')));
+        }
       }
     }
   }
@@ -104,7 +98,53 @@ class _ScanQRScreenState extends State<ScanQRScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Scan QR Code (${widget.communicationType == 'wifi' ? 'WiFi' : 'Bluetooth'})')
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            Navigator.pushReplacement(
+              context,
+              PageRouteBuilder(
+                pageBuilder: (context, animation, secondaryAnimation) => 
+                    const QRActionSelectionScreen(),
+                transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                  const begin = Offset(-1.0, 0.0);
+                  const end = Offset.zero;
+                  const curve = Curves.easeInOutCubic;
+                  
+                  var tween = Tween(begin: begin, end: end)
+                    .chain(CurveTween(curve: curve));
+                  var offsetAnimation = animation.drive(tween);
+                  
+                  return SlideTransition(
+                    position: offsetAnimation,
+                    child: FadeTransition(
+                      opacity: animation,
+                      child: child,
+                    ),
+                  );
+                },
+                transitionDuration: const Duration(milliseconds: 350),
+              ),
+            );
+          },
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Scan QR Code',
+              style: TextStyle(fontSize: 16),
+            ),
+            Text(
+              _authService.currentUser?.email ?? 'Unknown user',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.normal,
+                color: Colors.white70,
+              ),
+            ),
+          ],
+        ),
       ),
       body: Stack(
         children: [

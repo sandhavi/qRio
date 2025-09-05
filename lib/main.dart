@@ -2,34 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
-import 'screens/home_screen.dart';
+import 'screens/auth_wrapper.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load environment variables if available, but don't crash if missing.
-  bool envLoaded = false;
+  // Load environment variables if present (non-fatal if missing)
   try {
     await dotenv.load(fileName: '.env');
-    envLoaded = true;
-  } catch (e) {
-    debugPrint('dotenv load skipped: $e');
-  }
+  } catch (_) {}
 
-  // Initialize Firebase with best-effort fallbacks to avoid startup crash/black screen.
+  // Initialize Firebase safely (don't crash app if options are already configured)
   try {
-    if (envLoaded) {
-      // Use options from firebase_options.dart which read from .env
+    if (Firebase.apps.isEmpty) {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
-    } else {
-      // Fall back to platform defaults (e.g., Android uses google-services.json)
-      await Firebase.initializeApp();
     }
   } catch (e) {
-    // As a last resort, continue without Firebase so the UI still loads.
-    debugPrint('Firebase init failed, continuing without it: $e');
+    // Log and continue; AuthWrapper/UI can still render even if init fails temporarily
+    debugPrint('Firebase initialization warning: $e');
   }
 
   runApp(const MyApp());
@@ -42,9 +34,10 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      
       title: 'QRio',
       theme: ThemeData(primarySwatch: Colors.blue),
-      home: const HomeScreen(),
+      home: const AuthWrapper(),
     );
   }
 }

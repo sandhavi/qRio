@@ -11,7 +11,8 @@ plugins {
 android {
     namespace = "com.example.qrio"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // Override to highest required NDK to satisfy all plugins (see run log suggestions)
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
