@@ -44,6 +44,7 @@ dependencies:
   sqflite: ^2.3.0 # For SQLite database
   path: ^1.8.3 # For database path handling
   permission_handler: ^11.0.1 # For handling permissions
+  intl: ^0.18.1 # For date formatting
   
 
 dev_dependencies:
