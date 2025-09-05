@@ -4,12 +4,14 @@ import '../models/message_model.dart';
 import '../services/database_helper.dart';
 
 class SavedChatViewScreen extends StatefulWidget {
-  final Session session;
+  final Session? session;
+  final String? sessionId;
 
   const SavedChatViewScreen({
     super.key,
-    required this.session,
-  });
+    this.session,
+    this.sessionId,
+  }) : assert(session != null || sessionId != null, 'Either session or sessionId must be provided');
 
   @override
   State<SavedChatViewScreen> createState() => _SavedChatViewScreenState();
@@ -18,19 +20,35 @@ class SavedChatViewScreen extends StatefulWidget {
 class _SavedChatViewScreenState extends State<SavedChatViewScreen> {
   final DatabaseHelper _databaseHelper = DatabaseHelper();
   List<Message> _messages = [];
+  Session? _session;
   bool _isLoading = true;
+  String? _currentUserId;
 
   @override
   void initState() {
     super.initState();
-    _loadMessages();
+    _loadSessionAndMessages();
   }
 
-  Future<void> _loadMessages() async {
+  Future<void> _loadSessionAndMessages() async {
     try {
-      final messages = await _databaseHelper.getMessages(widget.session.sessionId);
+      // Get session if only sessionId was provided
+      if (widget.session != null) {
+        _session = widget.session;
+      } else if (widget.sessionId != null) {
+        _session = await _databaseHelper.getSession(widget.sessionId!);
+      }
+      
+      if (_session == null) {
+        throw Exception('Session not found');
+      }
+      
+      // Set current user ID - using 'user' as default for saved chats
+      _currentUserId = _session!.user1Id;
+      
+      final messages = await _databaseHelper.getMessages(_session!.sessionId);
       setState(() {
-        _messages = messages;
+        _messages = messages.reversed.toList(); // Reverse to show oldest first
         _isLoading = false;
       });
     } catch (e) {
@@ -40,10 +58,15 @@ class _SavedChatViewScreenState extends State<SavedChatViewScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error loading messages: $e'),
-            backgroundColor: Colors.red,
+            content: Text('Error loading chat: $e'),
+            backgroundColor: Colors.red[600],
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
+        Navigator.of(context).pop();
       }
     }
   }
@@ -242,28 +265,30 @@ class _SavedChatViewScreenState extends State<SavedChatViewScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(widget.session.chatTitle ?? 'Saved Chat'),
-            Text(
-              '${widget.session.messageCount} messages • ${widget.session.communicationType == 'wifi' ? 'WiFi' : 'Bluetooth'}',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.normal,
+            Text(_session?.chatTitle ?? 'Saved Chat'),
+            if (_session != null)
+              Text(
+                '${_messages.length} messages • ${_session!.communicationType == 'wifi' ? 'WiFi' : 'Bluetooth'}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.normal,
+                ),
               ),
-            ),
           ],
         ),
         actions: [
-          IconButton(
-            icon: Icon(
-              widget.session.communicationType == 'wifi' 
-                ? Icons.wifi 
-                : Icons.bluetooth,
-              color: widget.session.communicationType == 'wifi'
-                ? Colors.green
-                : Colors.blue,
+          if (_session != null)
+            IconButton(
+              icon: Icon(
+                _session!.communicationType == 'wifi' 
+                  ? Icons.wifi 
+                  : Icons.bluetooth,
+                color: _session!.communicationType == 'wifi'
+                  ? Colors.green
+                  : Colors.blue,
+              ),
+              onPressed: null,
             ),
-            onPressed: null,
-          ),
         ],
       ),
       body: _isLoading
@@ -295,7 +320,8 @@ class _SavedChatViewScreenState extends State<SavedChatViewScreen> {
                   itemCount: _messages.length,
                   itemBuilder: (context, index) {
                     final message = _messages[index];
-                    final isMe = message.senderId == widget.session.user1Id;
+                    final isMe = message.senderId == _currentUserId || 
+                                 message.senderId == 'user';
                     
                     // Check if we need to show date separator
                     bool showDateSeparator = false;
@@ -329,7 +355,7 @@ class _SavedChatViewScreenState extends State<SavedChatViewScreen> {
                 context: context,
                 builder: (context) => AlertDialog(
                   title: const Text('Delete Chat'),
-                  content: Text('Are you sure you want to delete "${widget.session.chatTitle ?? 'this chat'}"?'),
+                  content: Text('Are you sure you want to delete "${_session?.chatTitle ?? 'this chat'}"?'),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.of(context).pop(false),
@@ -344,9 +370,9 @@ class _SavedChatViewScreenState extends State<SavedChatViewScreen> {
                 ),
               );
               
-              if (confirm == true) {
-                await _databaseHelper.deleteSessionMessages(widget.session.sessionId);
-                await _databaseHelper.deleteSession(widget.session.sessionId);
+              if (confirm == true && _session != null) {
+                await _databaseHelper.deleteSessionMessages(_session!.sessionId);
+                await _databaseHelper.deleteSession(_session!.sessionId);
                 if (mounted) {
                   Navigator.of(context).pop();
                   ScaffoldMessenger.of(context).showSnackBar(
